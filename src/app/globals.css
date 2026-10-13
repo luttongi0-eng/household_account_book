@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'SchoolSafetyPictureDiary';
+  src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/2408-5@1.0/HakgyoansimGeurimilgiTTF-R.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  body {
+    background-color: #EFE8DA;
+    background-image: radial-gradient(#d3cbbd 0.75px, transparent 0.75px);
+    background-size: 16px 16px;
+    font-family: 'SchoolSafetyPictureDiary', sans-serif;
+    color: #333333;
+    font-style: normal;
+    font-weight: 400;
+  }
+
+  /* 제목은 내용보다 훨씬 더 두껍고 또렷하게 설정 (Bold 800) */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'SchoolSafetyPictureDiary', sans-serif !important;
+    font-weight: 800 !important;
+    font-style: normal !important;
+    letter-spacing: -0.01em;
+  }
+
+  /* 내용(본문) 부분은 두껍지 않은 기본 굵기(400)로 설정 */
+  p, span, div, label, input, textarea, select {
+    font-family: 'SchoolSafetyPictureDiary', sans-serif !important;
+    font-style: normal !important;
+  }
+}
+
+* {
+  font-family: 'SchoolSafetyPictureDiary', sans-serif !important;
+  font-style: normal !important;
+}
+
+.font-crayon, .font-body {
+  font-family: 'SchoolSafetyPictureDiary', sans-serif !important;
+  font-style: normal !important;
+}
+
+.sketch-board {
+  background-color: #FDFBF7;
+  box-shadow: 8px 12px 25px rgba(63, 59, 54, 0.15);
+  border-radius: 20px;
+}
+
+/* 손으로 삐뚤빼뚤 그린 듯한 보더 효과 */
+.crayon-border {
+  border: 2.5px solid #3F3B36;
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+}
+
+.crayon-border-round {
+  border: 2.5px solid #3F3B36;
+  border-radius: 18px 24px 20px 22px;
+}
+
+.crayon-border-modal {
+  border: 3px solid #3F3B36;
+  border-radius: 24px 16px 28px 18px;
+}
+
+.shadow-handdrawn {
+  box-shadow: 3px 4px 0px 0px #3F3B36;
+}
+
+.shadow-handdrawn-lg {
+  box-shadow: 5px 6px 0px 0px #3F3B36;
+}
+
+.shadow-handdrawn-xl {
+  box-shadow: 7px 9px 0px 0px #3F3B36;
+}
+
+/* 크레파스 밑줄 하이라이트 효과 */
+.crayon-highlight-yellow {
+  background: linear-gradient(104deg, rgba(255,244,189,0) 0.9%, rgba(255,230,109,0.7) 2.4%, rgba(255,244,189,0.5) 98%);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.crayon-highlight-red {
+  background: linear-gradient(104deg, rgba(255,107,107,0) 0.9%, rgba(255,107,107,0.3) 2.4%, rgba(255,150,150,0.2) 98%);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+/* 스프링 링 디테일 */
+.spiral-ring {
+  width: 14px;
+  height: 38px;
+  background: linear-gradient(135deg, #71717A 0%, #E4E4E7 50%, #52525B 100%);
+  border-radius: 12px;
+  border: 1.5px solid #27272A;
+  box-shadow: 2px 3px 2px rgba(0,0,0,0.25);
+}
