@@ -68,8 +68,7 @@ export default function Home() {
   const [aiPlan, setAiPlan] = useState<AiPlanResult>({
     event_advice: '이번 달 약속과 일정을 고려한 맞춤 소비 계획을 AI로 계산해보세요!',
     daily_goal: '하루 권장 소비액을 지키며 이번 달 예산과 저축 목표를 달성해보세요!',
-    specific_warning: '식비 및 취약 카테고리 지출 내역을 분석해 낭비를 점검해보세요!',
-    hobby_cheer: '취미 예산(10%) 한도를 지키며 즐겁고 스트레스 없는 저축을 이어가요! 🌱',
+    specific_warning: '식비 및 취약 카테고리 지출 내역을 분석해 줄여야 할 낭비 항목을 찾아보세요!',
     checklists: [],
   });
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -302,7 +301,6 @@ export default function Home() {
           event_advice: json.data.event_advice || prev.event_advice,
           daily_goal: json.data.daily_goal || prev.daily_goal,
           specific_warning: json.data.specific_warning || prev.specific_warning,
-          hobby_cheer: json.data.hobby_cheer || prev.hobby_cheer,
         }));
       } else {
         alert(json.error || 'AI 계획 생성에 실패했습니다.');
@@ -366,10 +364,10 @@ export default function Home() {
               <ChevronLeft size={26} className="sm:w-7 sm:h-7" />
             </button>
             <div className="flex items-center gap-1.5 sm:gap-2.5 whitespace-nowrap shrink-0">
-              <h1 className="font-crayon text-2xl xs:text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-[#2B2B2B] whitespace-nowrap leading-none drop-shadow-2xs">
-                월간파레트-희인
+              <h1 className="font-crayon text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-[#2B2B2B] whitespace-nowrap leading-none drop-shadow-2xs">
+                월간 팔레트
               </h1>
-              <span className="text-base sm:text-2xl font-bold bg-[#FFE8E8] text-[#E63946] px-2 py-0.5 sm:px-3 sm:py-1 rounded-xl sm:rounded-2xl border-2 border-[#3F3B36] shadow-xs whitespace-nowrap leading-none inline-flex items-center">
+              <span className="text-lg sm:text-2xl font-bold bg-[#FFE8E8] text-[#E63946] px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-xl sm:rounded-2xl border-2 border-[#3F3B36] shadow-xs whitespace-nowrap leading-none inline-flex items-center">
                 {currentMonth}월
               </span>
             </div>
@@ -797,7 +795,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* 3. specific_warning & 4. hobby_cheer: 소비 주의 경고 & 취미/저축 응원 */}
+        {/* 3. specific_warning: 줄여야 할 소비 항목 정밀 분석 */}
         <section
           className="bg-[#FFF5F5] p-5 sm:p-6 rounded-2xl crayon-border shadow-handdrawn flex flex-col justify-between"
           data-purpose="reduce-spending-advice"
@@ -805,41 +803,36 @@ export default function Home() {
           <div>
             <div className="flex items-center justify-between mb-3 border-b-2 border-red-200 pb-2">
               <h2 className="font-crayon text-2xl md:text-3xl font-bold text-red-950 flex items-center gap-2">
-                🚨 줄여야 할 소비 &amp; 응원{' '}
+                🚨 줄여야 할 소비 분석{' '}
                 <span className="text-xs sm:text-sm font-normal text-red-800 font-body">
-                  [주의 경고 &amp; 치어업]
+                  [소비 누수 탐지기]
                 </span>
               </h2>
               <span className="bg-red-200 text-red-950 text-xs px-2.5 py-1 rounded-full font-black border border-red-300">
-                AI 진단
+                AI 정밀 진단
               </span>
             </div>
 
-            {/* specific_warning: 취약 카테고리 지출 경고 */}
-            <div className="bg-white p-4 rounded-xl border-2 border-red-400 shadow-xs mb-3.5 relative">
-              <div className="flex items-center gap-2 text-red-900 font-crayon text-base sm:text-lg font-black mb-1">
+            {/* specific_warning: 취약 카테고리 소비 누수 정밀 분석 카드 */}
+            <div className="bg-white p-4.5 rounded-xl border-2 border-red-400 shadow-xs mb-3.5 relative">
+              <div className="flex items-center gap-2 text-red-900 font-crayon text-base sm:text-lg font-black mb-2">
                 <span>⚠️</span>
-                <span>취약 지출 카테고리 집중 경고</span>
+                <span>주의해야 할 소비 누수 항목 분석</span>
               </div>
-              <p className="text-xs sm:text-sm text-stone-800 font-body font-bold leading-relaxed">
+              <p className="text-sm sm:text-base text-stone-800 font-body font-bold leading-relaxed whitespace-pre-line">
                 {aiPlan.specific_warning}
               </p>
             </div>
 
-            {/* hobby_cheer: 취미 예산 & 저축 달성률 연계 격려 */}
-            <div className="bg-[#FAF5FF] p-4 rounded-xl border-2 border-purple-300 shadow-xs relative">
-              <div className="flex items-center gap-2 text-purple-900 font-crayon text-base sm:text-lg font-black mb-1">
-                <span>🎁</span>
-                <span>취미(10%) &amp; 돼지저금통 응원 멘트</span>
-              </div>
-              <p className="text-xs sm:text-sm text-stone-800 font-body font-bold leading-relaxed">
-                {aiPlan.hobby_cheer}
-              </p>
+            {/* 실천 지침 알림 카드 */}
+            <div className="bg-amber-50/80 p-3.5 rounded-xl border border-amber-300 text-stone-700 font-body text-xs sm:text-sm leading-relaxed">
+              <span className="font-bold text-amber-900 font-crayon text-sm block mb-1">💡 소비 통제 가이드</span>
+              지출 패턴 분석을 토대로 불필요한 결제 항목을 줄이고, 정해진 하루 권장 소비액 내에서 지출을 계획해보세요.
             </div>
           </div>
 
           <div className="mt-4 p-2.5 bg-red-100/80 rounded-xl border border-red-200 text-center font-crayon text-xs sm:text-sm text-red-900 font-black">
-            💡 "작은 낭비를 막고 취미 예산을 지키면 저축 저금통이 풍성해져요!"
+            🔍 "불필요한 지출 항목을 점검하고 통제하면 목표 예산을 지킬 수 있어요!"
           </div>
         </section>
       </div>
@@ -856,7 +849,7 @@ export default function Home() {
           </div>
           <div>
             <div className="font-bold text-lg text-stone-900 leading-tight">
-              월간파레트-희인 (Monthly Palette)
+              월간 팔레트 (Monthly Palette)
             </div>
             <div className="text-xs text-stone-500 font-body">
               크레파스로 칠해가는 나만의 스마트한 지출 기록장

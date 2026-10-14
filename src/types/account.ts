@@ -22,11 +22,11 @@ export interface MonthlyResolution {
 }
 
 export interface AiPlanResult {
-  // 새 사용자 요구사항 스키마 (초고속 단문 4대 핵심 필드)
+  // 새 사용자 요구사항 스키마 (초고속 단문 핵심 필드)
   event_advice: string;
   daily_goal: string;
   specific_warning: string;
-  hobby_cheer: string;
+  hobby_cheer?: string;
 
   // 기존 확장 호환용 필드
   dailyRecommendedAmount?: number;

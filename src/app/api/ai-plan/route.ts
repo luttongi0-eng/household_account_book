@@ -31,8 +31,7 @@ function getLiveApiKey(): string {
 const planSchema = z.object({
   event_advice: z.string().describe('남은 예산과 일수를 고려할 때, 남은 약속 횟수에서 1회당 얼마씩 쓰는 것이 좋은지 1문장 제안'),
   daily_goal: z.string().describe('기존 목표 유지 가능 여부 판단 후 그대로 반환하거나 수정한 목표 1문장, 없으면 하루 권장 소비액 포함 새 목표 1문장'),
-  specific_warning: z.string().describe('취약 카테고리 지출 내역을 참고하여 구체적으로 어떤 소비를 주의하고 줄여야 하는지 1문장 경고'),
-  hobby_cheer: z.string().describe('남은 취미 예산과 저축 달성률을 연관 지어 스트레스 없는 소비 또는 저축 동기부여를 위한 따뜻하고 재치 있는 조언 1문장'),
+  specific_warning: z.string().describe('취약 카테고리 지출 내역 및 실제 소비 데이터를 분석하여 구체적으로 어떤 소비 항목을 주의하고 줄여야 하는지 객관적이고 날카로운 1~2문장 소비 분석 및 경고'),
 });
 
 export async function POST(req: Request) {
@@ -49,7 +48,7 @@ export async function POST(req: Request) {
     } = body;
 
     const prompt = `
-당신은 똑똑하고 따뜻한 가계부 AI 코치입니다. 사용자의 재정 상태를 바탕으로 빠르게 핵심 조언을 생성해주세요.
+당신은 냉철하고 정확한 가계부 재정 분석 AI 코치입니다. 사용자의 재정 상태를 분석하여 불필요한 감성적인 응원이나 격려(치어업)는 일절 배제하고, 실제 줄여야 할 소비 항목과 지출 관리에 집중하여 분석 결과를 제공해주세요.
 
 [입력 데이터]
 - 이번 달 남은 예산: ${Number(remaining_budget).toLocaleString()}원
@@ -67,15 +66,15 @@ export async function POST(req: Request) {
 2. daily_goal: 
    - 만약 "${existing_goal}"이 "null"이나 "없음"이 아니라면, 현재 남은 예산(${Number(remaining_budget).toLocaleString()}원)으로 그 목표를 유지할 수 있는지 판단해. 유지가 가능하면 기존 목표를 그대로 반환하고, 수정이 불가피하면 상황에 맞춰 수정한 목표를 1문장으로 제시.
    - 만약 "없음"이라면, 남은 일수(${remaining_days}일)와 예산(${Number(remaining_budget).toLocaleString()}원)을 바탕으로 하루 권장 소비액을 포함한 새로운 목표를 1문장으로 제시.
-3. specific_warning: ${vulnerable_category} 지출 내역을 참고하여 구체적으로 어떤 소비를 주의하고 줄여야 하는지 1문장으로 경고.
-4. hobby_cheer: ${Number(remaining_hobby_budget).toLocaleString()}원의 남은 취미 예산과 ${savings_progress_percent}%의 저축 달성률을 연관 지어, 스트레스 없는 소비 또는 저축 동기부여를 위한 따뜻하고 재치 있는 조언 1문장 작성.
+3. specific_warning (줄여야 할 소비 항목 정밀 분석):
+   - 감성적인 응원이나 칭찬, 위로의 말은 일절 작성하지 마세요.
+   - ${vulnerable_category} 지출 내역을 중심으로, 사용자가 돈을 낭비하기 쉬운 구체적인 소비 패턴(예: 잦은 배달/간식/소액 반복 결제 등)을 날카롭게 지적하고, 이를 통제하고 줄이기 위한 실질적인 행동 지침을 구체적으로 경고 및 분석하여 1~2문장으로 작성하세요.
 
 [출력 형식 (반드시 유효한 JSON)]
 {
   "event_advice": "",
   "daily_goal": "",
-  "specific_warning": "",
-  "hobby_cheer": ""
+  "specific_warning": ""
 }
 `;
 
