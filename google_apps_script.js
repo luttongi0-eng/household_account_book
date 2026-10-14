@@ -10,7 +10,7 @@
  * 4. 시트 자동 초기화 (필요한 시트와 헤더가 없으면 자동 생성)
  */
 
-const SPREADSHEET_ID = '1wlVlzcgvWOc2kBOKumFn8QcPTcKc2b1HTE2usWRfqcI';
+const SPREADSHEET_ID = '1yUWnfj0eWHYOi1sjA4iZxX4ynn73cZncbk7TeTMYHH0';
 
 function getSpreadsheet() {
   if (SPREADSHEET_ID) {

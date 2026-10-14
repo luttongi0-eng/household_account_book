@@ -366,10 +366,10 @@ export default function Home() {
               <ChevronLeft size={26} className="sm:w-7 sm:h-7" />
             </button>
             <div className="flex items-center gap-1.5 sm:gap-2.5 whitespace-nowrap shrink-0">
-              <h1 className="font-crayon text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-[#2B2B2B] whitespace-nowrap leading-none drop-shadow-2xs">
-                월간 파레트
+              <h1 className="font-crayon text-2xl xs:text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-[#2B2B2B] whitespace-nowrap leading-none drop-shadow-2xs">
+                월간파레트-희인
               </h1>
-              <span className="text-lg sm:text-2xl font-bold bg-[#FFE8E8] text-[#E63946] px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-xl sm:rounded-2xl border-2 border-[#3F3B36] shadow-xs whitespace-nowrap leading-none inline-flex items-center">
+              <span className="text-base sm:text-2xl font-bold bg-[#FFE8E8] text-[#E63946] px-2 py-0.5 sm:px-3 sm:py-1 rounded-xl sm:rounded-2xl border-2 border-[#3F3B36] shadow-xs whitespace-nowrap leading-none inline-flex items-center">
                 {currentMonth}월
               </span>
             </div>
@@ -856,7 +856,7 @@ export default function Home() {
           </div>
           <div>
             <div className="font-bold text-lg text-stone-900 leading-tight">
-              월간 파레트 (Monthly Palette)
+              월간파레트-희인 (Monthly Palette)
             </div>
             <div className="text-xs text-stone-500 font-body">
               크레파스로 칠해가는 나만의 스마트한 지출 기록장

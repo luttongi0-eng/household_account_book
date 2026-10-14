@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "월간 파레트 - 스케치북 가계부",
+  title: "월간파레트-희인",
   description: "손글씨와 크레파스 감성을 담은 AI 스마트 가계부 월간 파레트",
 };
 
