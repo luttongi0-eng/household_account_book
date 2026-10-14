@@ -22,17 +22,24 @@ export interface MonthlyResolution {
 }
 
 export interface AiPlanResult {
-  dailyRecommendedAmount: number;
-  remainingDays: number;
-  encouragementMessage: string;
+  // 새 사용자 요구사항 스키마 (초고속 단문 4대 핵심 필드)
+  event_advice: string;
+  daily_goal: string;
+  specific_warning: string;
+  hobby_cheer: string;
+
+  // 기존 확장 호환용 필드
+  dailyRecommendedAmount?: number;
+  remainingDays?: number;
+  encouragementMessage?: string;
   checklists: { text: string; completed: boolean }[];
-  spendingCautions: {
+  spendingCautions?: {
     icon: string;
     title: string;
     amount: number;
     description: string;
   }[];
-  totalSavingsPotential: number;
+  totalSavingsPotential?: number;
   appointmentsSummary?: string;
   appointmentLimits?: {
     date: string;

@@ -29,89 +29,54 @@ function getLiveApiKey(): string {
 }
 
 const planSchema = z.object({
-  dailyRecommendedAmount: z.number().describe('앞으로 남은 날짜 동안 하루에 권장되는 지출 금액(원)'),
-  encouragementMessage: z.string().describe('사용자에게 전하는 따뜻하고 응원하는 멘트 (저축 목표 지키기 다짐 등)'),
-  checklists: z.array(
-    z.object({
-      text: z.string().describe('실천 가능한 절약 행동 수칙 (예: 금요일 퇴근길 대중교통 이용하기)'),
-      completed: z.boolean().default(false),
-    })
-  ).describe('실천할 수 있는 3가지 절약 체크리스트'),
-  spendingCautions: z.array(
-    z.object({
-      icon: z.string().describe('이모지 아이콘 (예: 🛵, 📺, ☕)'),
-      title: z.string().describe('주의해야 할 소비 항목 이름 (예: 심야 배달비 & 야식비)'),
-      amount: z.number().describe('예상 누수 또는 주의 금액'),
-      description: z.string().describe('구체적인 원인 분석 및 줄이기 팁'),
-    })
-  ).describe('낭비가 의심되거나 주의해야 할 소비 누수 3건'),
-  totalSavingsPotential: z.number().describe('주의 항목들을 아꼈을 때 절약할 수 있는 총 금액'),
-  appointmentsSummary: z.string().describe('달력에 등록된 약속/일정을 확인하고 지출 계획에 어떻게 반영했는지 설명'),
-  appointmentLimits: z.array(
-    z.object({
-      date: z.string().describe('약속 날짜 (YYYY-MM-DD)'),
-      title: z.string().describe('약속 내용/이름'),
-      maxLimit: z.number().describe('이 약속에서 최대 얼마까지만 사용해야 하는지 추천하는 최대 지출 한도 금액(원)'),
-      advice: z.string().describe('해당 약속에서 한도를 지키기 위한 현실적인 꿀팁 (예: 1차 식사만 참석, 2차는 카페 가기 등)'),
-    })
-  ).describe('달력에 등록된 각 약속/이벤트별 AI 추천 최대 지출 한도 및 조언 리스트'),
-  hobbyAdvice: z.string().describe('취미 10% 예산에 대한 조언'),
+  event_advice: z.string().describe('남은 예산과 일수를 고려할 때, 남은 약속 횟수에서 1회당 얼마씩 쓰는 것이 좋은지 1문장 제안'),
+  daily_goal: z.string().describe('기존 목표 유지 가능 여부 판단 후 그대로 반환하거나 수정한 목표 1문장, 없으면 하루 권장 소비액 포함 새 목표 1문장'),
+  specific_warning: z.string().describe('취약 카테고리 지출 내역을 참고하여 구체적으로 어떤 소비를 주의하고 줄여야 하는지 1문장 경고'),
+  hobby_cheer: z.string().describe('남은 취미 예산과 저축 달성률을 연관 지어 스트레스 없는 소비 또는 저축 동기부여를 위한 따뜻하고 재치 있는 조언 1문장'),
 });
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const {
-      year,
-      month,
-      remainingDays,
-      totalIncome,
-      totalExpense,
-      remainingBudget,
-      savingsTarget,
-      currentSaved,
-      hobbyBudget,
-      hobbyExpense,
-      appointments,
-      transactions,
+      remaining_budget = 0,
+      remaining_days = 1,
+      event_count = 0,
+      vulnerable_category = '식비',
+      remaining_hobby_budget = 0,
+      savings_progress_percent = 0,
+      existing_goal = '없음',
     } = body;
 
     const prompt = `
-당신은 아기자기한 감성의 스케치북 가계부의 든든한 "AI 똑똑이 재정 코치"입니다.
-사용자의 현재 재정 상태와 달력에 등록된 앞으로의 약속/일정을 꼼꼼히 확인하고, 남은 ${remainingDays}일 동안의 지출 계획과 각 약속별 최대 지출 한도를 정해주세요.
+당신은 똑똑하고 따뜻한 가계부 AI 코치입니다. 사용자의 재정 상태를 바탕으로 빠르게 핵심 조언을 생성해주세요.
 
-[현재 가계부 현황]
-- 기준 연월: ${year}년 ${month}월
-- 이번 달 남은 일수: ${remainingDays}일
-- 총 수입: ${totalIncome.toLocaleString()}원
-- 총 지출: ${totalExpense.toLocaleString()}원
-- 남은 한 달 생활비 예산: ${remainingBudget.toLocaleString()}원
-- 저축 목표 금액: ${savingsTarget.toLocaleString()}원 (현재 저금통 모은 금액: ${currentSaved.toLocaleString()}원)
-- 취미 예산 한도(수입의 10%): ${hobbyBudget.toLocaleString()}원 (현재 취미 지출: ${hobbyExpense.toLocaleString()}원)
+[입력 데이터]
+- 이번 달 남은 예산: ${Number(remaining_budget).toLocaleString()}원
+- 이번 달 남은 일수: ${remaining_days}일
+- 남은 이벤트/약속 횟수: ${event_count}회
+- 과거 지출 내역 기반 취약 카테고리: ${vulnerable_category}
+- 이번 달 남은 취미 예산 (10% 한도): ${Number(remaining_hobby_budget).toLocaleString()}원
+- 연간 저축(돼지저금통) 달성률: ${savings_progress_percent}%
+- 사용자가 이미 설정해 둔 이번 달 목표: ${existing_goal || '없음'}
 
-[달력에 등록된 약속 및 일정]
-${appointments && appointments.length > 0 ? JSON.stringify(appointments, null, 2) : '등록된 특별한 약속이 없습니다.'}
+[요구사항]
+1. event_advice:
+   - 남은 이벤트/약속 횟수는 ${event_count}회입니다 (이미 지나간 과거 약속은 제외된 앞으로의 남은 약속 횟수입니다).
+   - 남은 ${Number(remaining_budget).toLocaleString()}원과 남은 ${remaining_days}일을 고려할 때, 앞으로 남은 ${event_count}번의 약속에서 1회당 얼마씩 쓰는 것이 좋은지 정확히 ${event_count}번의 약속을 기준으로 1문장으로 제안해주세요. (만약 0회라면 앞으로 남은 약속이 없으므로 일상 지출 관리에 대한 팁을 1문장으로 제안)
+2. daily_goal: 
+   - 만약 "${existing_goal}"이 "null"이나 "없음"이 아니라면, 현재 남은 예산(${Number(remaining_budget).toLocaleString()}원)으로 그 목표를 유지할 수 있는지 판단해. 유지가 가능하면 기존 목표를 그대로 반환하고, 수정이 불가피하면 상황에 맞춰 수정한 목표를 1문장으로 제시.
+   - 만약 "없음"이라면, 남은 일수(${remaining_days}일)와 예산(${Number(remaining_budget).toLocaleString()}원)을 바탕으로 하루 권장 소비액을 포함한 새로운 목표를 1문장으로 제시.
+3. specific_warning: ${vulnerable_category} 지출 내역을 참고하여 구체적으로 어떤 소비를 주의하고 줄여야 하는지 1문장으로 경고.
+4. hobby_cheer: ${Number(remaining_hobby_budget).toLocaleString()}원의 남은 취미 예산과 ${savings_progress_percent}%의 저축 달성률을 연관 지어, 스트레스 없는 소비 또는 저축 동기부여를 위한 따뜻하고 재치 있는 조언 1문장 작성.
 
-[최근 소비 및 수입 내역]
-${transactions && transactions.length > 0 ? JSON.stringify(transactions, null, 2) : '등록된 지출 내역이 전혀 없습니다.'}
-
-[🚨 절대 원칙 - 가상 데이터 생성 엄격 금지]
-1. ⚠️ **[남은 한 달 예산 필수 엄수]**:
-   - 현재 화면에 표시된 [남은 한 달 생활비 예산]은 정확히 **${remainingBudget.toLocaleString()}원**입니다.
-   - 코멘트나 설명(encouragementMessage, appointmentsSummary 등)에서 **절대로 350,000원 등 임의의 가상 금액을 말하지 마시고, 반드시 실제 남은 예산인 ${remainingBudget.toLocaleString()}원을 그대로 인용**하세요!
-2. ⚠️ **[달력 약속 및 일정 필수 확인]**:
-   - 달력에 등록된 약속 목록:
-${appointments && appointments.length > 0 ? JSON.stringify(appointments, null, 2) : '등록된 약속 없음'}
-   - 위 목록에 약속이 단 1건이라도 있다면, 절대로 "등록된 특별한 일정이나 약속이 없어"라고 거짓말하지 마세요! 해당 약속들의 날짜와 내용을 반드시 직접 언급하고, 각 약속별 최대 지출 한도(maxLimit)를 책정하세요.
-3. ⚠️ **[가상 소비 항목 날조 금지]**:
-   - 사용자가 실제로 입력하지 않은 소비 항목(카페, 배달비, 편의점, OTT 구독 등)을 절대로 임의로 지어내지 마세요.
-   - [줄여야 할 소비 부분 (spendingCautions)]은 오직 [최근 소비 및 수입 내역]에 실제로 존재하는 거래 내역만 분석하세요. 없으면 빈 배열([])로 반환하세요.
-4. ⭐ 각 약속마다:
-   - 실제 남은 예산(${remainingBudget.toLocaleString()}원)과 약속 성격을 고려하여, "이 약속에서는 최대 얼마까지만 사용해야 하는지(maxLimit)" 현실적인 최대 한도 금액을 정확히 책정해주세요.
-   - 한도를 넘기지 않고 아끼며 즐길 수 있는 팁(advice)도 1문장으로 함께 제공해주세요.
-5. 약속 날의 최대 지출 한도들을 모두 감안하여, 남은 기간(${remainingDays}일) 동안의 평상시 하루 권장 지출액(dailyRecommendedAmount)을 계산하세요.
-6. 취미 예산 10% 룰에 대한 피드백도 함께 담아주세요.
-7. 말투는 따뜻하고 친절하며 격려하는 손글씨 다이어리 말투(~해요, ~해볼까요?)로 작성해주세요.
+[출력 형식 (반드시 유효한 JSON)]
+{
+  "event_advice": "",
+  "daily_goal": "",
+  "specific_warning": "",
+  "hobby_cheer": ""
+}
 `;
 
     const liveKey = getLiveApiKey();
@@ -129,13 +94,14 @@ ${appointments && appointments.length > 0 ? JSON.stringify(appointments, null, 2
       apiKey: liveKey,
     });
 
-    // gemini-3.8-flash 및 지원되는 최신 모델들 (종료된 2.5 제외)
+    // 현재 구글 API 키에서 가장 빠르고 성공률 높은 모델 순서로 배치
     const candidateModels = [
-      'gemini-3.8-flash',
-      'gemini-flash-latest',
-      'gemini-3.5-flash',
       'gemini-3.5-flash-lite',
       'gemini-3.1-flash-lite',
+      'gemini-flash-lite-latest',
+      'gemini-3.5-flash',
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
     ];
 
     let lastError: any = null;
@@ -168,7 +134,7 @@ ${appointments && appointments.length > 0 ? JSON.stringify(appointments, null, 2
       success: true,
       data: {
         ...resultObj,
-        remainingDays,
+        remaining_days,
       },
     });
   } catch (error: any) {

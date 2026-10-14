@@ -361,7 +361,7 @@ https://github.com/luttongi0-eng/household_account_book
 ```Prompt
 - git config --global user.email "luttongi0@gmail.com"
 - git config --global user.name "luttongi0-eng"
-- Personal access tokens (classic)=YOUR_GITHUB_PERSONAL_ACCESS_TOKEN
+- Personal access tokens (classic)=YOUR_GITHUB_TOKEN
 - 해당 저장소에 대해 깃허브 연결을 확인
 ```
 

@@ -1,8 +1,6 @@
-'use client';
-
 import React, { useState } from 'react';
 import { Transaction } from '@/types/account';
-import { X, Trash2, Calendar, Sparkles } from 'lucide-react';
+import { X, Trash2, Calendar, Sparkles, Pencil, RotateCcw } from 'lucide-react';
 
 interface CalendarModalProps {
   isOpen: boolean;
@@ -13,6 +11,7 @@ interface CalendarModalProps {
   onSelectDate: (date: string) => void;
   transactions: Transaction[];
   onAddTransaction: (t: Omit<Transaction, 'id'>) => void;
+  onUpdateTransaction?: (t: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
@@ -50,10 +49,12 @@ export default function CalendarModal({
   onSelectDate,
   transactions,
   onAddTransaction,
+  onUpdateTransaction,
   onDeleteTransaction,
   onPrevMonth,
   onNextMonth,
 }: CalendarModalProps) {
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [type, setType] = useState<'expense' | 'income' | 'savings'>('expense');
   const [amount, setAmount] = useState<string>('');
   const [categoryItem, setCategoryItem] = useState<{ cat: string; sub: string }>(EXPENSE_CATEGORIES[0]);
@@ -75,13 +76,35 @@ export default function CalendarModal({
     .filter((t) => t.type === 'income')
     .reduce((acc, cur) => acc + cur.amount, 0);
 
+  const handleStartEdit = (item: Transaction) => {
+    setEditingId(item.id);
+    setType(item.type);
+    setAmount(item.amount.toString());
+    const matchedCategory = (item.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).find(
+      (c) => c.cat === item.category && c.sub === item.subCategory
+    ) || { cat: item.category, sub: item.subCategory || item.category };
+    setCategoryItem(matchedCategory);
+    setDescription(item.description);
+    setPaymentMethod(item.paymentMethod || '카드');
+    setIsAppointment(Boolean(item.isAppointment || item.category === '약속/이벤트'));
+    setMemo(item.memo || item.appointmentMemo || '');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setAmount('');
+    setDescription('');
+    setMemo('');
+    setIsAppointment(false);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const rawAmount = amount.replace(/,/g, '').trim();
     const numAmount = rawAmount === '' ? 0 : parseInt(rawAmount, 10);
 
     // 약속/이벤트가 아닌 일반 거래일 때만 금액 필수 입력 검증
-    if (!isAppointment && (isNaN(numAmount) || numAmount <= 0)) {
+    if (!isAppointment && (isNaN(numAmount) || numAmount < 0)) {
       alert('올바른 금액을 입력해주세요!');
       return;
     }
@@ -92,17 +115,35 @@ export default function CalendarModal({
       return;
     }
 
-    onAddTransaction({
-      date: selectedDate,
-      type,
-      amount: isNaN(numAmount) ? 0 : numAmount,
-      category: isAppointment ? '약속/이벤트' : categoryItem.cat,
-      subCategory: isAppointment ? '약속/이벤트' : categoryItem.sub,
-      description: finalDescription,
-      paymentMethod,
-      isAppointment,
-      memo: isAppointment ? (memo.trim() || finalDescription) : memo.trim(),
-    });
+    if (editingId && onUpdateTransaction) {
+      // 수정 모드
+      onUpdateTransaction({
+        id: editingId,
+        date: selectedDate,
+        type,
+        amount: isNaN(numAmount) ? 0 : numAmount,
+        category: isAppointment ? '약속/이벤트' : categoryItem.cat,
+        subCategory: isAppointment ? '약속/이벤트' : categoryItem.sub,
+        description: finalDescription,
+        paymentMethod,
+        isAppointment,
+        memo: isAppointment ? (memo.trim() || finalDescription) : memo.trim(),
+      });
+      setEditingId(null);
+    } else {
+      // 신규 추가
+      onAddTransaction({
+        date: selectedDate,
+        type,
+        amount: isNaN(numAmount) ? 0 : numAmount,
+        category: isAppointment ? '약속/이벤트' : categoryItem.cat,
+        subCategory: isAppointment ? '약속/이벤트' : categoryItem.sub,
+        description: finalDescription,
+        paymentMethod,
+        isAppointment,
+        memo: isAppointment ? (memo.trim() || finalDescription) : memo.trim(),
+      });
+    }
 
     setAmount('');
     setDescription('');
@@ -342,7 +383,7 @@ export default function CalendarModal({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <span
                           className={`font-bold text-base ${
                             item.type === 'income' ? 'text-blue-600' : 'text-red-600'
@@ -353,11 +394,19 @@ export default function CalendarModal({
                         </span>
                         <button
                           type="button"
+                          onClick={() => handleStartEdit(item)}
+                          className="text-stone-400 hover:text-amber-600 p-1 rounded hover:bg-stone-100 transition-colors"
+                          title="수정"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => onDeleteTransaction(item.id)}
-                          className="text-stone-400 hover:text-red-500 p-1"
+                          className="text-stone-400 hover:text-red-500 p-1 rounded hover:bg-stone-100 transition-colors"
                           title="삭제"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={15} />
                         </button>
                       </div>
                     </div>
@@ -372,10 +421,22 @@ export default function CalendarModal({
               className="bg-[#FFF8E7] p-4 sm:p-5 rounded-2xl crayon-border shadow-handdrawn flex-1 flex flex-col justify-between"
             >
               <div>
-                <h4 className="font-crayon text-xl font-bold text-stone-800 mb-3 flex items-center gap-2">
-                  <Sparkles size={18} className="text-crayonOrange" />
-                  <span>크레파스로 새로 적기</span>
-                </h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-crayon text-xl font-bold text-stone-800 flex items-center gap-2">
+                    <Sparkles size={18} className="text-crayonOrange" />
+                    <span>{editingId ? '🖍️ 기록 수정하기' : '크레파스로 새로 적기'}</span>
+                  </h4>
+                  {editingId && (
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      className="px-2 py-1 text-xs font-crayon font-bold text-stone-600 bg-white hover:bg-stone-100 border border-stone-300 rounded-lg flex items-center gap-1"
+                    >
+                      <RotateCcw size={12} />
+                      수정 취소
+                    </button>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-2 gap-2 mb-3 font-crayon">
                   <button
@@ -495,9 +556,13 @@ export default function CalendarModal({
 
               <button
                 type="submit"
-                className="w-full py-2.5 bg-[#FF9F45] text-stone-900 font-crayon text-xl font-black rounded-xl crayon-border shadow-handdrawn hover:bg-orange-400 active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer flex items-center justify-center gap-2"
+                className={`w-full py-2.5 font-crayon text-xl font-black rounded-xl crayon-border shadow-handdrawn active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                  editingId
+                    ? 'bg-amber-400 hover:bg-amber-500 text-stone-900'
+                    : 'bg-[#FF9F45] hover:bg-orange-400 text-stone-900'
+                }`}
               >
-                <span>🖍️ 크레파스로 적기</span>
+                <span>{editingId ? '💾 수정 내용 저장하기' : '🖍️ 크레파스로 적기'}</span>
               </button>
             </form>
           </div>

@@ -66,6 +66,41 @@ export async function addTransactionToSheet(tx: Transaction): Promise<boolean> {
 }
 
 /**
+ * Transaction 수정 (POST)
+ */
+export async function updateTransactionInSheet(tx: Transaction): Promise<boolean> {
+  if (!SCRIPT_URL) return false;
+  try {
+    const typeKorean = tx.type === 'income' ? '수입' : tx.type === 'savings' ? '저축' : '지출';
+    const payload = {
+      sheet: 'transactions',
+      action: 'update',
+      data: {
+        id: tx.id,
+        date: tx.date,
+        type: typeKorean,
+        category: tx.category,
+        sub_category: tx.subCategory || tx.category,
+        description: tx.description,
+        amount: tx.amount,
+        payment_method: tx.paymentMethod,
+        memo: tx.memo || '',
+      },
+    };
+
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+    return true;
+  } catch (error) {
+    console.error('Failed to update transaction in Google Sheet:', error);
+    return false;
+  }
+}
+
+/**
  * Transaction 삭제 (POST)
  */
 export async function deleteTransactionFromSheet(id: string): Promise<boolean> {

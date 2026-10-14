@@ -14,6 +14,7 @@ import BudgetSettingModal from '@/components/BudgetSettingModal';
 import {
   fetchTransactionsFromSheet,
   addTransactionToSheet,
+  updateTransactionInSheet,
   deleteTransactionFromSheet,
   saveSettingToSheet,
   fetchSettingsFromSheet,
@@ -65,14 +66,11 @@ export default function Home() {
 
   // AI Plan state
   const [aiPlan, setAiPlan] = useState<AiPlanResult>({
-    dailyRecommendedAmount: 0,
-    remainingDays: Math.max(1, currentDate.endOf('month').date() - currentDate.date() + 1),
-    encouragementMessage:
-      '남은 기간 동안 하루 지출 한도를 지키면 이번 달 저축 목표를 멋지게 달성할 수 있어요!',
+    event_advice: '이번 달 약속과 일정을 고려한 맞춤 소비 계획을 AI로 계산해보세요!',
+    daily_goal: '하루 권장 소비액을 지키며 이번 달 예산과 저축 목표를 달성해보세요!',
+    specific_warning: '식비 및 취약 카테고리 지출 내역을 분석해 낭비를 점검해보세요!',
+    hobby_cheer: '취미 예산(10%) 한도를 지키며 즐겁고 스트레스 없는 저축을 이어가요! 🌱',
     checklists: [],
-    spendingCautions: [],
-    totalSavingsPotential: 0,
-    appointmentsSummary: '',
   });
   const [isAiLoading, setIsAiLoading] = useState(false);
 
@@ -184,6 +182,12 @@ export default function Home() {
     await addTransactionToSheet(created);
   };
 
+  // Update transaction (Local + Google Sheet Sync)
+  const handleUpdateTransaction = async (updatedTx: Transaction) => {
+    setTransactions((prev) => prev.map((t) => (t.id === updatedTx.id ? updatedTx : t)));
+    await updateTransactionInSheet(updatedTx);
+  };
+
   // Delete transaction (Local + Google Sheet Sync)
   const handleDeleteTransaction = async (id: string) => {
     setTransactions((prev) => prev.filter((t) => t.id !== id));
@@ -234,50 +238,71 @@ export default function Home() {
     setCustomPlanInput('');
   };
 
-  // Fetch AI Plan from Gemini
+  // Fetch AI Plan from Gemini (초고속 4대 핵심 조언)
   const fetchAiPlan = async () => {
     setIsAiLoading(true);
     try {
-      const appointments = monthTransactions
-        .filter((t) => t.isAppointment || t.category === '약속/이벤트' || t.subCategory === '약속/이벤트' || Boolean(t.memo && t.memo.trim()))
-        .map((t) => ({
-          date: t.date,
-          title: t.description,
-          memo: t.memo || t.description,
-        }));
-
       const remainingDays = Math.max(1, currentDate.endOf('month').date() - currentDate.date() + 1);
+
+      // 남은(오늘 포함 미래) 이벤트/약속 횟수 (이미 지난 과거의 약속은 제외)
+      const eventCount = monthTransactions.filter(
+        (t) =>
+          (t.isAppointment ||
+            t.category === '약속/이벤트' ||
+            t.subCategory === '약속/이벤트' ||
+            Boolean(t.memo && t.memo.trim())) &&
+          t.date >= todayStr
+      ).length;
+
+      // 과거 지출 내역 기반 취약 카테고리 (가장 지출액이 큰 카테고리/소분류)
+      const expenseMap: { [cat: string]: number } = {};
+      monthTransactions
+        .filter((t) => t.type === 'expense')
+        .forEach((t) => {
+          const key = t.subCategory || t.category;
+          expenseMap[key] = (expenseMap[key] || 0) + t.amount;
+        });
+
+      let vulnerableCategory = '식비';
+      let maxExpense = 0;
+      Object.entries(expenseMap).forEach(([cat, sum]) => {
+        if (sum > maxExpense) {
+          maxExpense = sum;
+          vulnerableCategory = cat;
+        }
+      });
+
+      // 남은 취미 예산 (취미 예산 한도 - 현재 취미 지출)
+      const remainingHobbyBudget = Math.max(0, hobbyBudget - hobbyExpense);
+
+      // 연간 저축 달성률
+      const savingsProgressPercent = piggyPercent;
+
+      // 이미 설정된 목표 (포스트잇 다짐)
+      const existingGoal = currentResolution.resolution?.trim() || '없음';
 
       const res = await fetch('/api/ai-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          year: currentYear,
-          month: currentMonth,
-          remainingDays,
-          totalIncome,
-          totalExpense,
-          remainingBudget,
-          savingsTarget,
-          currentSaved,
-          hobbyBudget,
-          hobbyExpense,
-          appointments,
-          transactions: monthTransactions.map((t) => ({
-            date: t.date,
-            type: t.type,
-            category: t.category,
-            amount: t.amount,
-            description: t.description,
-          })),
+          remaining_budget: remainingBudget,
+          remaining_days: remainingDays,
+          event_count: eventCount,
+          vulnerable_category: vulnerableCategory,
+          remaining_hobby_budget: remainingHobbyBudget,
+          savings_progress_percent: savingsProgressPercent,
+          existing_goal: existingGoal,
         }),
       });
 
       const json = await res.json();
       if (json.success && json.data) {
         setAiPlan((prev) => ({
-          ...json.data,
-          checklists: [...json.data.checklists, ...prev.checklists.filter((c) => !json.data.checklists.some((jc: any) => jc.text === c.text))],
+          ...prev,
+          event_advice: json.data.event_advice || prev.event_advice,
+          daily_goal: json.data.daily_goal || prev.daily_goal,
+          specific_warning: json.data.specific_warning || prev.specific_warning,
+          hobby_cheer: json.data.hobby_cheer || prev.hobby_cheer,
         }));
       } else {
         alert(json.error || 'AI 계획 생성에 실패했습니다.');
@@ -328,36 +353,34 @@ export default function Home() {
       {/* END: SpiralBinder */}
 
       {/* BEGIN: HeaderSection */}
-      <header className="flex flex-col md:flex-row items-center justify-between border-b-4 border-dashed border-[#B8AEA3] pb-6 mb-8 mt-2 gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <span className="text-4xl">🖍️</span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handlePrevMonth}
-                className="p-1 hover:bg-stone-200 rounded-full text-stone-600 cursor-pointer"
-                title="이전달"
-              >
-                <ChevronLeft size={28} />
-              </button>
-              <div className="flex items-center gap-2">
-                <h1 className="font-crayon text-4xl md:text-5xl font-extrabold tracking-tight text-[#2B2B2B]">
-                  월간 파레트
-                </h1>
-                <span className="text-xl sm:text-2xl font-bold bg-[#FFE8E8] text-[#E63946] px-3 py-1 rounded-2xl border-2 border-[#3F3B36] shadow-xs">
-                  {currentMonth}월
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={handleNextMonth}
-                className="p-1 hover:bg-stone-200 rounded-full text-stone-600 cursor-pointer"
-                title="다음달"
-              >
-                <ChevronRight size={28} />
-              </button>
+      <header className="flex flex-col md:flex-row items-center justify-between border-b-4 border-dashed border-[#B8AEA3] pb-4 sm:pb-6 mb-6 sm:mb-8 mt-2 gap-3">
+        <div className="w-full sm:w-auto">
+          <div className="flex items-center justify-center sm:justify-start gap-1 sm:gap-2">
+            <span className="text-3xl sm:text-4xl select-none shrink-0">🖍️</span>
+            <button
+              type="button"
+              onClick={handlePrevMonth}
+              className="p-0.5 sm:p-1 hover:bg-stone-200 rounded-full text-stone-600 cursor-pointer shrink-0"
+              title="이전달"
+            >
+              <ChevronLeft size={26} className="sm:w-7 sm:h-7" />
+            </button>
+            <div className="flex items-center gap-1.5 sm:gap-2.5 whitespace-nowrap shrink-0">
+              <h1 className="font-crayon text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-[#2B2B2B] whitespace-nowrap leading-none drop-shadow-2xs">
+                월간 파레트
+              </h1>
+              <span className="text-lg sm:text-2xl font-bold bg-[#FFE8E8] text-[#E63946] px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-xl sm:rounded-2xl border-2 border-[#3F3B36] shadow-xs whitespace-nowrap leading-none inline-flex items-center">
+                {currentMonth}월
+              </span>
             </div>
+            <button
+              type="button"
+              onClick={handleNextMonth}
+              className="p-0.5 sm:p-1 hover:bg-stone-200 rounded-full text-stone-600 cursor-pointer shrink-0"
+              title="다음달"
+            >
+              <ChevronRight size={26} className="sm:w-7 sm:h-7" />
+            </button>
           </div>
         </div>
 
@@ -371,9 +394,9 @@ export default function Home() {
           <div className="flex flex-wrap items-center justify-between mb-4 gap-3">
             {/* 좌측: 이번 달 달력 타이틀 */}
             <div className="flex items-center gap-2 sm:gap-3">
-              <h2 className="font-crayon text-3xl font-bold flex items-center gap-2 text-stone-900">
+              <h2 className="font-crayon text-2xl sm:text-3xl font-bold flex items-center gap-2 text-stone-900">
                 📅 이번 달 달력{' '}
-                <span className="text-lg font-normal text-stone-600">
+                <span className="text-base sm:text-lg font-normal text-stone-600">
                   ({currentYear}년 {currentMonth}월)
                 </span>
               </h2>
@@ -547,7 +570,7 @@ export default function Home() {
 
       {/* BEGIN: SummarySection */}
       <section className="mb-10" data-purpose="monthly-summary-section">
-        <h2 className="font-crayon text-3xl font-bold mb-4 flex items-center gap-2 text-stone-900">
+        <h2 className="font-crayon text-2xl sm:text-3xl font-bold mb-4 flex items-center gap-2 text-stone-900">
           ✏️ 한달 요약{' '}
           <span className="text-sm text-stone-600 font-body">({currentMonth}월 실시간 정산)</span>
         </h2>
@@ -674,112 +697,69 @@ export default function Home() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
         {/* AI 남은 한달 계획 */}
         <section
-          className="bg-[#FFFBEA] p-6 rounded-2xl crayon-border shadow-handdrawn flex flex-col justify-between"
+          className="bg-[#FFFBEA] p-5 sm:p-6 rounded-2xl crayon-border shadow-handdrawn flex flex-col justify-between"
           data-purpose="ai-daily-plan"
         >
           <div>
             <div className="flex items-center justify-between mb-3 border-b-2 border-amber-300 pb-2">
               <h2 className="font-crayon text-2xl md:text-3xl font-bold text-stone-900 flex items-center gap-2">
                 🤖 남은 한달 계획{' '}
-                <span className="text-sm font-normal text-stone-700 font-body">
-                  [AI 맞춤 계산]
+                <span className="text-xs sm:text-sm font-normal text-stone-700 font-body">
+                  [초고속 AI 코칭]
                 </span>
               </h2>
               <div className="flex items-center gap-2">
                 <span className="bg-amber-200 text-stone-900 text-xs px-2.5 py-1 rounded-full font-black border border-amber-400">
-                  남은 {aiPlan.remainingDays}일
+                  남은 {Math.max(1, currentDate.endOf('month').date() - currentDate.date() + 1)}일
                 </span>
                 <button
                   type="button"
                   onClick={fetchAiPlan}
                   disabled={isAiLoading}
-                  className="p-1.5 bg-amber-100 hover:bg-amber-200 rounded-lg border border-amber-400 text-stone-900 transition-all cursor-pointer"
-                  title="Gemini AI로 재계산"
+                  className="p-1.5 bg-amber-100 hover:bg-amber-200 rounded-lg border border-amber-400 text-stone-900 transition-all cursor-pointer flex items-center gap-1 font-crayon text-xs font-bold"
+                  title="Gemini AI로 초고속 재계산"
                 >
                   <RefreshCw size={14} className={isAiLoading ? 'animate-spin' : ''} />
+                  <span className="hidden sm:inline">AI 분석</span>
                 </button>
               </div>
             </div>
 
-            {/* 약속 반영 안내 뱃지 */}
-            {aiPlan.appointmentsSummary && (
-              <div className="mb-3 px-3 py-1.5 bg-amber-200/80 rounded-xl border border-amber-400 text-xs font-crayon text-stone-900 flex items-center gap-1.5 font-bold">
-                <span>📌 약속 일정 반영:</span>
-                <span>{aiPlan.appointmentsSummary}</span>
+            {/* 1. daily_goal: 오늘의 목표 & 하루 권장 소비 */}
+            <div className="bg-white p-4 rounded-xl border-2 border-stone-800 shadow-xs mb-3.5 relative">
+              <div className="font-crayon text-base sm:text-lg font-bold text-stone-900 mb-1 flex items-center gap-1.5">
+                <span>🎯</span>
+                <span>이달의 목표 &amp; 하루 소비 가이드</span>
               </div>
-            )}
+              <p className="text-sm text-stone-800 leading-relaxed font-body font-bold">
+                {aiPlan.daily_goal}
+              </p>
+            </div>
 
-            {/* 달력에 등록된 약속별 최대 지출 한도 카드 */}
-            {aiPlan.appointmentLimits && aiPlan.appointmentLimits.length > 0 && (
-              <div className="mb-4 p-3.5 bg-[#FFF9E6] rounded-xl border-2 border-amber-400/80 shadow-xs">
-                <div className="text-sm font-crayon font-bold text-amber-950 mb-2 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <span>📌</span>
-                    <span>달력 약속별 추천 최대 지출 한도</span>
-                  </span>
-                  <span className="text-[11px] bg-amber-200 px-2 py-0.5 rounded-full font-bold text-stone-800">
-                    {aiPlan.appointmentLimits.length}개 일정
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {aiPlan.appointmentLimits.map((app, idx) => (
-                    <div
-                      key={idx}
-                      className="p-2.5 bg-white rounded-lg border border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-1 shadow-2xs"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">
-                            {app.date}
-                          </span>
-                          <span className="font-crayon font-bold text-stone-900 text-sm">
-                            {app.title}
-                          </span>
-                        </div>
-                        {app.advice && (
-                          <p className="text-[11px] text-stone-600 mt-0.5 font-body">
-                            💡 {app.advice}
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-right sm:pl-3 whitespace-nowrap">
-                        <span className="text-[11px] text-stone-500 block sm:inline mr-1">최대 한도:</span>
-                        <span className="font-crayon font-black text-red-600 text-base">
-                          최대 ₩{app.maxLimit.toLocaleString()}원
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            {/* 2. event_advice: 남은 약속별 1회당 권장 사용액 제안 */}
+            <div className="bg-[#FFF9E6] p-3.5 rounded-xl border border-amber-300 shadow-xs mb-3.5">
+              <div className="text-sm font-crayon font-bold text-amber-950 mb-1 flex items-center gap-1.5">
+                <span>📅</span>
+                <span>약속 및 이벤트 지출 조언 (1회당 권장액)</span>
               </div>
-            )}
-
-            {/* 일일 권장 소비액 가이드 */}
-            <div className="bg-white p-4 rounded-xl border-2 border-stone-800 shadow-xs mb-4 relative">
-              <div className="font-crayon text-xl font-bold text-stone-900 mb-1 flex items-center gap-2">
-                <span>💡 하루 권장 지출 금액:</span>
-                <span className="text-2xl text-stone-950 font-black crayon-highlight-yellow">
-                  ₩{aiPlan.dailyRecommendedAmount.toLocaleString()} 원
-                </span>
-              </div>
-              <p className="text-sm text-stone-700 leading-relaxed font-body font-bold">
-                "{aiPlan.encouragementMessage}"
+              <p className="text-xs sm:text-sm text-stone-700 font-body leading-relaxed">
+                {aiPlan.event_advice}
               </p>
             </div>
 
             {/* 크레파스 체크리스트 */}
-            {aiPlan.checklists.length > 0 ? (
-              <div className="space-y-2.5 font-crayon text-lg mb-4">
+            {aiPlan.checklists && aiPlan.checklists.length > 0 && (
+              <div className="space-y-2 font-crayon text-base mb-3">
                 {aiPlan.checklists.map((chk, i) => (
                   <label
                     key={i}
-                    className="flex items-center gap-3 p-2 bg-amber-100/70 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors border border-amber-300"
+                    className="flex items-center gap-2.5 p-2 bg-amber-100/70 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors border border-amber-300"
                   >
                     <input
                       type="checkbox"
                       checked={chk.completed}
                       onChange={() => handleToggleChecklist(i)}
-                      className="w-5 h-5 text-[#FF9F45] rounded border-2 border-stone-700 focus:ring-0"
+                      className="w-4 h-4 text-[#FF9F45] rounded border-2 border-stone-700 focus:ring-0"
                     />
                     <span
                       className={
@@ -791,97 +771,76 @@ export default function Home() {
                   </label>
                 ))}
               </div>
-            ) : (
-              <div className="py-3 px-4 mb-4 bg-white/70 rounded-xl border border-dashed border-amber-300 text-stone-500 font-crayon text-sm text-center">
-                아래 입력창에서 나만의 이번 달 절약 계획을 직접 추가해보세요! ✍️
-              </div>
             )}
 
-            {/* 나만의 절약 계획 추가 입력창 */}
-            <form onSubmit={handleAddCustomPlan} className="flex gap-2 font-crayon">
+            {/* 나만의 절약 계획 추가 입력창 (모바일 반응형 최적화) */}
+            <form onSubmit={handleAddCustomPlan} className="flex flex-col sm:flex-row gap-2 font-crayon mb-2">
               <input
                 type="text"
-                placeholder="나만의 절약 계획 추가 (예: 일요일 장봐서 냉장고 파먹기)"
+                placeholder="나만의 절약 계획 추가 (예: 배달 대신 집밥)"
                 value={customPlanInput}
                 onChange={(e) => setCustomPlanInput(e.target.value)}
-                className="flex-1 px-3 py-1.5 bg-white border-2 border-stone-400 rounded-xl text-stone-900 font-bold text-sm outline-none focus:border-stone-800"
+                className="w-full sm:flex-1 px-3 py-2 bg-white border-2 border-stone-400 rounded-xl text-stone-900 font-bold text-sm outline-none focus:border-stone-800"
               />
               <button
                 type="submit"
-                className="px-3 py-1.5 bg-[#FF9F45] hover:bg-orange-400 text-stone-900 border-2 border-stone-800 rounded-xl font-black text-sm flex items-center gap-1 shadow-xs cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2 bg-[#FF9F45] hover:bg-orange-400 text-stone-900 border-2 border-stone-800 rounded-xl font-black text-sm flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:translate-y-0.5 transition-all"
               >
-                <Plus size={16} /> 추가
+                <Plus size={16} /> 추가하기
               </button>
             </form>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-amber-300 flex items-center justify-between text-xs font-crayon text-stone-700 font-bold">
-            <span>* Google Gemini AI 기반 실시간 맞춤 분석</span>
-            <span>* 달력 약속 및 지출 변동 즉시 반영</span>
+          <div className="mt-3 pt-2.5 border-t border-amber-300 flex items-center justify-between text-xs font-crayon text-stone-600 font-bold">
+            <span>* 초고속 Gemini AI 맞춤 엔진</span>
+            <span>* 지출 및 약속 변동 실시간 반영</span>
           </div>
         </section>
 
-        {/* 줄여야 할 소비 부분 (낭비 탐지기) */}
+        {/* 3. specific_warning & 4. hobby_cheer: 소비 주의 경고 & 취미/저축 응원 */}
         <section
-          className="bg-[#FFF5F5] p-6 rounded-2xl crayon-border shadow-handdrawn flex flex-col justify-between"
+          className="bg-[#FFF5F5] p-5 sm:p-6 rounded-2xl crayon-border shadow-handdrawn flex flex-col justify-between"
           data-purpose="reduce-spending-advice"
         >
           <div>
             <div className="flex items-center justify-between mb-3 border-b-2 border-red-200 pb-2">
               <h2 className="font-crayon text-2xl md:text-3xl font-bold text-red-950 flex items-center gap-2">
-                🚨 줄여야 할 소비 부분{' '}
-                <span className="text-sm font-normal text-red-800 font-body">
-                  [낭비 탐지기]
+                🚨 줄여야 할 소비 &amp; 응원{' '}
+                <span className="text-xs sm:text-sm font-normal text-red-800 font-body">
+                  [주의 경고 &amp; 치어업]
                 </span>
               </h2>
               <span className="bg-red-200 text-red-950 text-xs px-2.5 py-1 rounded-full font-black border border-red-300">
-                주의 {aiPlan.spendingCautions.length}건
+                AI 진단
               </span>
             </div>
-            <p className="font-body text-sm text-stone-700 font-bold mb-4">
-              AI 소비 패턴 분석 결과, 아래 항목들에서 예상보다 많은 누수가 일어나고 있어요.
-            </p>
 
-            <div className="space-y-3 font-crayon">
-              {aiPlan.spendingCautions.length > 0 ? (
-                aiPlan.spendingCautions.map((caution, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-white p-3.5 rounded-xl border-2 border-red-400 relative overflow-hidden flex items-start gap-3 shadow-xs"
-                  >
-                    <div className="text-2xl mt-0.5">{caution.icon}</div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xl font-black text-red-950">
-                          {caution.title}
-                        </span>
-                        <span className="text-base text-red-700 font-black crayon-highlight-red">
-                          -₩{caution.amount.toLocaleString()} 지출
-                        </span>
-                      </div>
-                      <p className="text-xs text-stone-700 font-body font-bold mt-0.5">
-                        {caution.description}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="py-8 bg-white/70 rounded-xl border border-dashed border-red-200 text-center text-stone-400 font-crayon text-base">
-                  상단의 🔄 버튼을 누르면 AI가 소비 내역을 분석해 낭비 항목을 찾아드려요! 🔍
-                </div>
-              )}
+            {/* specific_warning: 취약 카테고리 지출 경고 */}
+            <div className="bg-white p-4 rounded-xl border-2 border-red-400 shadow-xs mb-3.5 relative">
+              <div className="flex items-center gap-2 text-red-900 font-crayon text-base sm:text-lg font-black mb-1">
+                <span>⚠️</span>
+                <span>취약 지출 카테고리 집중 경고</span>
+              </div>
+              <p className="text-xs sm:text-sm text-stone-800 font-body font-bold leading-relaxed">
+                {aiPlan.specific_warning}
+              </p>
+            </div>
+
+            {/* hobby_cheer: 취미 예산 & 저축 달성률 연계 격려 */}
+            <div className="bg-[#FAF5FF] p-4 rounded-xl border-2 border-purple-300 shadow-xs relative">
+              <div className="flex items-center gap-2 text-purple-900 font-crayon text-base sm:text-lg font-black mb-1">
+                <span>🎁</span>
+                <span>취미(10%) &amp; 돼지저금통 응원 멘트</span>
+              </div>
+              <p className="text-xs sm:text-sm text-stone-800 font-body font-bold leading-relaxed">
+                {aiPlan.hobby_cheer}
+              </p>
             </div>
           </div>
 
-          {aiPlan.totalSavingsPotential > 0 && (
-            <div className="mt-4 p-2.5 bg-red-100 rounded-xl border border-red-300 text-center font-crayon text-base text-red-950 font-black">
-              🎉 위 항목들만 줄여도 이번 달{' '}
-              <span className="text-[#FF6B6B] text-lg underline font-black">
-                ₩{aiPlan.totalSavingsPotential.toLocaleString()}원
-              </span>
-              을 더 아낄 수 있어요!
-            </div>
-          )}
+          <div className="mt-4 p-2.5 bg-red-100/80 rounded-xl border border-red-200 text-center font-crayon text-xs sm:text-sm text-red-900 font-black">
+            💡 "작은 낭비를 막고 취미 예산을 지키면 저축 저금통이 풍성해져요!"
+          </div>
         </section>
       </div>
       {/* END: AiPlanAndReduceSection */}
@@ -929,6 +888,7 @@ export default function Home() {
         onSelectDate={(date) => setSelectedDate(date)}
         transactions={monthTransactions}
         onAddTransaction={handleAddTransaction}
+        onUpdateTransaction={handleUpdateTransaction}
         onDeleteTransaction={handleDeleteTransaction}
         onPrevMonth={handlePrevMonth}
         onNextMonth={handleNextMonth}
