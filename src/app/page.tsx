@@ -25,15 +25,15 @@ import { Calendar as CalendarIcon, RefreshCw, Plus, ChevronLeft, ChevronRight, S
 
 export default function Home() {
   // Current view date (year & month navigation)
-  const [currentDate, setCurrentDate] = useState(() => dayjs('2026-10-13'));
-  const [todayStr, setTodayStr] = useState('2026-10-13');
+  const [currentDate, setCurrentDate] = useState(() => dayjs('2026-10-14'));
+  const [todayStr, setTodayStr] = useState('2026-10-14');
   const currentYear = currentDate.year();
   const currentMonth = currentDate.month() + 1; // 1-12
   const currentMonthStr = currentDate.format('YYYY-MM');
 
   // Transactions state
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
-  const [selectedDate, setSelectedDate] = useState<string>('2026-10-13');
+  const [selectedDate, setSelectedDate] = useState<string>('2026-10-14');
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isPiggyModalOpen, setIsPiggyModalOpen] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
@@ -145,6 +145,24 @@ export default function Home() {
   const targetBudget = currentResolution.targetBudget || 2000000;
   const remainingBudget = Math.max(0, targetBudget - totalExpense);
 
+  // 현재 보고 있는 달의 남은 일수 정확한 계산 (오늘 날짜와 해당 달의 일수 비교)
+  const today = dayjs(todayStr);
+  const currentMonthStart = currentDate.startOf('month');
+  const currentMonthEnd = currentDate.endOf('month');
+  const daysInMonthCount = currentMonthEnd.date();
+
+  let remainingDays = 1;
+  if (today.isBefore(currentMonthStart, 'day')) {
+    // 미래 달을 보고 있는 경우: 그 달 전체 일수
+    remainingDays = daysInMonthCount;
+  } else if (today.isAfter(currentMonthEnd, 'day')) {
+    // 과거 달을 보고 있는 경우: 이미 지난 달이므로 0일
+    remainingDays = 0;
+  } else {
+    // 이번 달을 보고 있는 경우: 오늘 날짜부터 말일까지 남은 일수 (오늘 포함)
+    remainingDays = currentMonthEnd.date() - today.date() + 1;
+  }
+
   // Hobby 10% rule
   const hobbyBudget = Math.round(totalIncome * 0.1);
   const hobbyExpense = monthTransactions
@@ -241,25 +259,35 @@ export default function Home() {
   const fetchAiPlan = async () => {
     setIsAiLoading(true);
     try {
-      const remainingDays = Math.max(1, currentDate.endOf('month').date() - currentDate.date() + 1);
+      // 남은(오늘 포함 미래) 이벤트/약속 목록 (이미 지난 과거의 약속은 제외)
+      const upcomingAppointments = monthTransactions
+        .filter(
+          (t) =>
+            (t.isAppointment ||
+              t.category === '약속/이벤트' ||
+              t.subCategory === '약속/이벤트' ||
+              Boolean(t.memo && t.memo.trim())) &&
+            t.date >= todayStr
+        )
+        .map((t) => ({
+          date: t.date,
+          title: t.description || t.memo || '약속',
+          memo: t.memo || '',
+          estimatedAmount: t.amount > 0 ? t.amount : 0,
+        }));
 
-      // 남은(오늘 포함 미래) 이벤트/약속 횟수 (이미 지난 과거의 약속은 제외)
-      const eventCount = monthTransactions.filter(
-        (t) =>
-          (t.isAppointment ||
-            t.category === '약속/이벤트' ||
-            t.subCategory === '약속/이벤트' ||
-            Boolean(t.memo && t.memo.trim())) &&
-          t.date >= todayStr
-      ).length;
+      const eventCount = upcomingAppointments.length;
 
-      // 과거 지출 내역 기반 취약 카테고리 (가장 지출액이 큰 카테고리/소분류)
+      // 과거 변동 지출 내역 기반 취약 카테고리 (보험금, 주거 등 고정비 제외하고 실제 줄일 수 있는 식비, 쇼핑, 취미 등 변동비 대상)
+      const fixedCategories = ['보험금', '주거', '통신', '교통/통신'];
       const expenseMap: { [cat: string]: number } = {};
       monthTransactions
         .filter((t) => t.type === 'expense')
         .forEach((t) => {
           const key = t.subCategory || t.category;
-          expenseMap[key] = (expenseMap[key] || 0) + t.amount;
+          if (!fixedCategories.includes(key)) {
+            expenseMap[key] = (expenseMap[key] || 0) + t.amount;
+          }
         });
 
       let vulnerableCategory = '식비';
@@ -280,17 +308,25 @@ export default function Home() {
       // 이미 설정된 목표 (포스트잇 다짐)
       const existingGoal = currentResolution.resolution?.trim() || '없음';
 
+      // 실제 지출 내역 요약 (최근 15건)
+      const recentExpenses = monthTransactions
+        .filter((t) => t.type === 'expense' && t.amount > 0)
+        .slice(-15)
+        .map((t) => `${t.date}: [${t.subCategory || t.category}] ${t.description} (${t.amount.toLocaleString()}원)`);
+
       const res = await fetch('/api/ai-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           remaining_budget: remainingBudget,
-          remaining_days: remainingDays,
+          remaining_days: Math.max(1, remainingDays),
           event_count: eventCount,
+          upcoming_appointments: upcomingAppointments,
           vulnerable_category: vulnerableCategory,
           remaining_hobby_budget: remainingHobbyBudget,
           savings_progress_percent: savingsProgressPercent,
           existing_goal: existingGoal,
+          recent_expenses: recentExpenses,
         }),
       });
 
@@ -708,7 +744,7 @@ export default function Home() {
               </h2>
               <div className="flex items-center gap-2">
                 <span className="bg-amber-200 text-stone-900 text-xs px-2.5 py-1 rounded-full font-black border border-amber-400">
-                  남은 {Math.max(1, currentDate.endOf('month').date() - currentDate.date() + 1)}일
+                  남은 {remainingDays}일
                 </span>
                 <button
                   type="button"
@@ -723,13 +759,13 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 1. daily_goal: 오늘의 목표 & 하루 권장 소비 */}
-            <div className="bg-white p-4 rounded-xl border-2 border-stone-800 shadow-xs mb-3.5 relative">
-              <div className="font-crayon text-base sm:text-lg font-bold text-stone-900 mb-1 flex items-center gap-1.5">
+            {/* 1. daily_goal: 남은 한달 목표 & 하루 권장 소비 상세 계획 */}
+            <div className="bg-white p-4 sm:p-4.5 rounded-xl border-2 border-stone-800 shadow-xs mb-3.5 relative">
+              <div className="font-crayon text-base sm:text-lg font-bold text-stone-900 mb-1.5 flex items-center gap-1.5">
                 <span>🎯</span>
-                <span>이달의 목표 &amp; 하루 소비 가이드</span>
+                <span>남은 한달 지출 배분 &amp; 하루 소비 가이드</span>
               </div>
-              <p className="text-sm text-stone-800 leading-relaxed font-body font-bold">
+              <p className="text-xs sm:text-sm text-stone-800 leading-relaxed font-body font-bold whitespace-pre-line">
                 {aiPlan.daily_goal}
               </p>
             </div>

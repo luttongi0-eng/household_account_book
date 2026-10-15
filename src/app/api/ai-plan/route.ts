@@ -30,8 +30,8 @@ function getLiveApiKey(): string {
 
 const planSchema = z.object({
   event_advice: z.string().describe('남은 예산과 일수를 고려할 때, 남은 약속 횟수에서 1회당 얼마씩 쓰는 것이 좋은지 1문장 제안'),
-  daily_goal: z.string().describe('기존 목표 유지 가능 여부 판단 후 그대로 반환하거나 수정한 목표 1문장, 없으면 하루 권장 소비액 포함 새 목표 1문장'),
-  specific_warning: z.string().describe('취약 카테고리 지출 내역 및 실제 소비 데이터를 분석하여 구체적으로 어떤 소비 항목을 주의하고 줄여야 하는지 객관적이고 날카로운 1~2문장 소비 분석 및 경고'),
+  daily_goal: z.string().describe('남은 기간 동안의 한달 지출 목표와 하루 권장 지출액을 상세하고 구체적인 계획으로 2~3문장 설명'),
+  specific_warning: z.string().describe('실제 지출 내역에서 발견된 구체적인 소비 누수 항목(품목명, 잦은 지출 패턴 등)을 짚고, 이를 어떻게 줄여야 하는지 구체적이고 현실적인 행동 요령을 담아 2~3문장으로 상세히 분석 및 경고'),
 });
 
 export async function POST(req: Request) {
@@ -41,34 +41,43 @@ export async function POST(req: Request) {
       remaining_budget = 0,
       remaining_days = 1,
       event_count = 0,
+      upcoming_appointments = [],
       vulnerable_category = '식비',
       remaining_hobby_budget = 0,
       savings_progress_percent = 0,
       existing_goal = '없음',
+      recent_expenses = [],
     } = body;
 
     const prompt = `
-당신은 냉철하고 정확한 가계부 재정 분석 AI 코치입니다. 사용자의 재정 상태를 분석하여 불필요한 감성적인 응원이나 격려(치어업)는 일절 배제하고, 실제 줄여야 할 소비 항목과 지출 관리에 집중하여 분석 결과를 제공해주세요.
+당신은 정확하고 현실적인 가계부 재정 분석 전문가입니다. 사용자의 재정 상태와 실제 소비 내역을 분석하여, 피상적인 조언 대신 **구체적인 품목과 수치를 들어 자세하고 실천 가능한 설명**을 제공해주세요. 감성적인 응원이나 칭찬은 배제합니다.
 
 [입력 데이터]
-- 이번 달 남은 예산: ${Number(remaining_budget).toLocaleString()}원
+- 이번 달 남은 생활비 예산: ${Number(remaining_budget).toLocaleString()}원
 - 이번 달 남은 일수: ${remaining_days}일
 - 남은 이벤트/약속 횟수: ${event_count}회
-- 과거 지출 내역 기반 취약 카테고리: ${vulnerable_category}
+- 앞으로 남은 약속 목록:
+${upcoming_appointments && upcoming_appointments.length > 0 ? upcoming_appointments.map((a: any) => `- ${a.date}: ${a.title} ${a.memo ? `(${a.memo})` : ''} ${a.estimatedAmount > 0 ? `[예상 ${a.estimatedAmount.toLocaleString()}원]` : ''}`).join('\n') : '남은 약속 없음'}
+- 변동 지출 취약 카테고리: ${vulnerable_category}
 - 이번 달 남은 취미 예산 (10% 한도): ${Number(remaining_hobby_budget).toLocaleString()}원
 - 연간 저축(돼지저금통) 달성률: ${savings_progress_percent}%
-- 사용자가 이미 설정해 둔 이번 달 목표: ${existing_goal || '없음'}
+- 사용자가 설정한 이번 달 목표: ${existing_goal || '없음'}
+- 최근 실제 지출 내역:
+${recent_expenses && recent_expenses.length > 0 ? recent_expenses.map((e: string) => `- ${e}`).join('\n') : '최근 지출 내역 없음'}
 
-[요구사항]
+[상세 작성 가이드]
 1. event_advice:
-   - 남은 이벤트/약속 횟수는 ${event_count}회입니다 (이미 지나간 과거 약속은 제외된 앞으로의 남은 약속 횟수입니다).
-   - 남은 ${Number(remaining_budget).toLocaleString()}원과 남은 ${remaining_days}일을 고려할 때, 앞으로 남은 ${event_count}번의 약속에서 1회당 얼마씩 쓰는 것이 좋은지 정확히 ${event_count}번의 약속을 기준으로 1문장으로 제안해주세요. (만약 0회라면 앞으로 남은 약속이 없으므로 일상 지출 관리에 대한 팁을 1문장으로 제안)
-2. daily_goal: 
-   - 만약 "${existing_goal}"이 "null"이나 "없음"이 아니라면, 현재 남은 예산(${Number(remaining_budget).toLocaleString()}원)으로 그 목표를 유지할 수 있는지 판단해. 유지가 가능하면 기존 목표를 그대로 반환하고, 수정이 불가피하면 상황에 맞춰 수정한 목표를 1문장으로 제시.
-   - 만약 "없음"이라면, 남은 일수(${remaining_days}일)와 예산(${Number(remaining_budget).toLocaleString()}원)을 바탕으로 하루 권장 소비액을 포함한 새로운 목표를 1문장으로 제시.
-3. specific_warning (줄여야 할 소비 항목 정밀 분석):
-   - 감성적인 응원이나 칭찬, 위로의 말은 일절 작성하지 마세요.
-   - ${vulnerable_category} 지출 내역을 중심으로, 사용자가 돈을 낭비하기 쉬운 구체적인 소비 패턴(예: 잦은 배달/간식/소액 반복 결제 등)을 날카롭게 지적하고, 이를 통제하고 줄이기 위한 실질적인 행동 지침을 구체적으로 경고 및 분석하여 1~2문장으로 작성하세요.
+   - 남은 예산 ${Number(remaining_budget).toLocaleString()}원과 남은 ${remaining_days}일을 고려할 때, 앞으로 남은 ${event_count}번의 약속에서 1회당 얼마(총 약속 예산 = 1회당 권장액 × ${event_count}회)를 배정하는 것이 적절한지 구체적인 1회당 권장 금액을 명시하여 1문장으로 제안해주세요. (약속이 0회인 경우 일상 지출 관리에 대한 팁을 1문장으로 제안)
+
+2. daily_goal (★매우 중요 - 약속 예산 차감 후 순수 일상 지출액 계산):
+   - 1번(event_advice)에서 약속용으로 배정한 총 금액(예: 1회당 A원 × ${event_count}회 = 총 약속비 B원)을 전체 남은 예산(${Number(remaining_budget).toLocaleString()}원)에서 먼저 차감하세요.
+   - 차감하고 남은 순수 일상 생활비(남은 예산 - 총 약속비)를 남은 ${remaining_days}일로 나눈 **"약속 비용을 제외한 하루 순수 권장 소비액"**을 정확한 숫자로 계산하여 제시하세요.
+   - "약속 비용으로 총 B원을 떼어두면, 남은 ${remaining_days}일 동안 하루에 약 C원씩 쓸 수 있습니다"라는 계산 과정을 포함하여, 기존 목표("${existing_goal}")를 지키기 위한 구체적인 배분 가이드를 2~3문장으로 명확히 설명해주세요.
+
+3. specific_warning (주의해야 할 소비 누수 항목 정밀 분석 및 행동 요령):
+   - 보험금이나 공과금 같은 고정비는 임의로 줄일 수 없으므로 언급하지 마세요.
+   - 최근 지출 내역(예: 다이소 소액 구매, 간식, 외식 등)과 ${vulnerable_category} 지출 패턴을 직접 인용하여, 어떤 지출들이 쌓여 누수가 발생하고 있는지 구체적으로 지적하세요.
+   - 이를 효과적으로 차단하기 위해 실생활에서 바로 실천할 수 있는 구체적인 행동 수칙(예: 결제 전 장바구니 하루 보류, 편의점 방문 횟수 제한 등)을 포함하여 2~3문장으로 자세하고 친절하게 설명해주세요.
 
 [출력 형식 (반드시 유효한 JSON)]
 {
